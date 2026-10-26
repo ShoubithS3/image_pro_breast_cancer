@@ -18,7 +18,12 @@ def build_cbis_manifest(root, output):
     full = {}
     with info.open(newline='') as handle:
         for row in csv.DictReader(handle):
-            if row.get('SeriesDescription', '').strip().lower() != 'full mammogram images':
+            description = row.get('SeriesDescription', '').strip().lower()
+            # The Kaggle export contains 566 full-mammogram records whose
+            # SeriesDescription is blank. Case CSVs still identify their exact
+            # SeriesInstanceUID, so accept only blank/full records and map the
+            # series UID directly rather than scanning every path component.
+            if description not in ('', 'full mammogram images'):
                 continue
             raw = row['image_path'].replace('\\', '/').strip()
             if '/jpeg/' not in '/' + raw:
@@ -27,7 +32,8 @@ def build_cbis_manifest(root, output):
             path = (root / relative).resolve()
             if not path.is_relative_to(root):
                 raise ValueError('Image path escapes the dataset root')
-            full.setdefault(path.parent.name, set()).add(path)
+            series = (row.get('SeriesInstanceUID') or path.parent.name).strip()
+            full.setdefault(series, set()).add(path)
     images, patients_test = {}, set()
     report = dict(source='awsaf49/cbis-ddsm-breast-cancer-image-dataset',
                   label_rule='full image is malignant if any described lesion is malignant',
@@ -39,9 +45,10 @@ def build_cbis_manifest(root, output):
             with source.open(newline='') as handle:
                 for row in csv.DictReader(handle):
                     raw = row['image file path'].strip().replace('\\', '/')
-                    candidates = set()
-                    for component in raw.split('/')[:-1]:
-                        candidates.update(full.get(component, set()))
+                    components = raw.split('/')
+                    if len(components) < 2:
+                        raise ValueError('Unrecognized case image path; audit the export')
+                    candidates = set(full.get(components[-2], set()))
                     if len(candidates) != 1:
                         raise ValueError(f'Ambiguous or unmapped full image for patient {row["patient_id"]}')
                     path = candidates.pop()
@@ -73,6 +80,15 @@ def build_cbis_manifest(root, output):
             report['excluded_train_views_for_test_patients'] += 1
             continue
         records.append(row)
+    by_digest = {}
+    for row in records:
+        digest = hashlib.sha256(Path(row['image_path']).read_bytes()).hexdigest()
+        by_digest.setdefault(digest, []).append(row)
+    duplicate_groups = [group for group in by_digest.values() if len(group) > 1]
+    duplicate_paths = {row['image_path'] for group in duplicate_groups for row in group}
+    records = [row for row in records if row['image_path'] not in duplicate_paths]
+    report.update(duplicate_content_groups=len(duplicate_groups),
+                  excluded_duplicate_images=len(duplicate_paths))
     if not records:
         raise ValueError('No usable images found')
     output.parent.mkdir(parents=True, exist_ok=True)
