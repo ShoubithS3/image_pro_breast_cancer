@@ -8,10 +8,11 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from .evaluation import calibrate_temperature, calibrated, evaluate_test
 from .core import MODES, coverage_curve, features, load_manifest, metrics, patient_split, prepare_image
 
 
-def train(manifest, output, mode="combined", seed=42):
+def train(manifest, output, mode="combined", seed=42, provenance="real"):
     output = Path(output)
     if output.exists():
         raise ValueError("Choose a new output directory to preserve previous experiments")
@@ -21,26 +22,31 @@ def train(manifest, output, mode="combined", seed=42):
     y = np.array([r["label"] for r in rows])
     model = make_pipeline(StandardScaler(), LogisticRegression(max_iter=2000, random_state=seed))
     model.fit(x[parts["train"]], y[parts["train"]])
-    report = dict(mode=mode, seed=seed, model="handcrafted texture + logistic regression",
+    temperature = calibrate_temperature(y[parts["validation"]], model.predict_proba(x[parts["validation"]])[:, 1])
+    config = dict(schema_version=1, kind="baseline", mode=mode, temperature=temperature,
+                  provenance=provenance, clinical_validation=False, seed=seed)
+    report = dict(config=config, mode=mode, seed=seed, model="handcrafted texture + logistic regression",
                   clinical_validation=False, splits={})
     for name, ids in parts.items():
-        p = model.predict_proba(x[ids])[:, 1]
+        p = calibrated(model.predict_proba(x[ids])[:, 1], temperature)
         report["splits"][name] = dict(metrics=metrics(y[ids], p),
                                      patient_count=len({rows[i]["patient_id"] for i in ids}),
                                      coverage_curve=coverage_curve(y[ids], p))
     test = parts["test"]
+    report["held_out"] = evaluate_test([rows[i] for i in test], calibrated(model.predict_proba(x[test])[:, 1], temperature), seed)
     report["density_subgroups"] = {}
     for density in ("1", "2", "3", "4", ""):
         ids = [i for i in test if rows[i]["density"] == density]
         if ids:
-            report["density_subgroups"][density or "unknown"] = metrics(y[ids], model.predict_proba(x[ids])[:, 1])
+            report["density_subgroups"][density or "unknown"] = metrics(y[ids], calibrated(model.predict_proba(x[ids])[:, 1], temperature))
     report["stress_test"] = {}
     for name, kwargs in {"blur_radius_2": {"blur": 2}, "noise_std_0.05": {"noise": .05}}.items():
         stressed = np.stack([features(prepare_image(rows[i]["image_path"], seed=seed+int(i), **kwargs), mode)[0]
                              for i in test])
-        report["stress_test"][name] = metrics(y[test], model.predict_proba(stressed)[:, 1])
+        report["stress_test"][name] = metrics(y[test], calibrated(model.predict_proba(stressed)[:, 1], temperature))
     output.mkdir(parents=True)
-    joblib.dump(dict(model=model, mode=mode, schema_version=1), output / "model.joblib")
+    joblib.dump(dict(model=model, mode=mode, schema_version=1, temperature=temperature), output / "model.joblib")
+    (output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
     (output / "metrics.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
     assignments = {int(i): name for name, ids in parts.items() for i in ids}
     (output / "split_manifest.json").write_text(json.dumps([
@@ -55,8 +61,9 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--mode", choices=MODES, default="combined")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--provenance", choices=["real", "synthetic-smoke"], default="real")
     args = parser.parse_args()
-    train(args.manifest, args.output, args.mode, args.seed)
+    train(args.manifest, args.output, args.mode, args.seed, args.provenance)
 
 
 if __name__ == "__main__":

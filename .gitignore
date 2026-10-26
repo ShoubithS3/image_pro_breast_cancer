@@ -6,3 +6,9 @@ __pycache__/
 data/
 artifacts/
 .streamlit/secrets.toml
+state/
+.env
+.env.*
+!.env.example
+*.pt
+*.joblib

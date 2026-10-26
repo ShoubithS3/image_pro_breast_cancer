@@ -36,7 +36,7 @@ def load_manifest(path):
             if density not in ("", "1", "2", "3", "4"):
                 raise ValueError("Density must be empty or a category from 1 to 4")
             rows.append(dict(patient_id=patient, image_path=str(image_path),
-                             label=int(row["label"]), density=density, sha256=digest))
+                             label=int(row["label"]), density=density, sha256=digest, source_split=row.get("source_split", "").strip()))
     if not rows:
         raise ValueError("Manifest is empty")
     return rows
@@ -48,8 +48,17 @@ def patient_split(rows, seed=42):
     if len(set(groups)) < 10:
         raise ValueError("Need at least 10 distinct patients for this baseline split")
     indices = np.arange(len(rows))
-    trainval, test = next(GroupShuffleSplit(n_splits=1, test_size=.2,
-                                            random_state=seed).split(indices, groups=groups))
+    declared = {r.get("source_split", "") for r in rows}
+    if declared == {"train", "test"}:
+        trainval = np.array([i for i, r in enumerate(rows) if r["source_split"] == "train"])
+        test = np.array([i for i, r in enumerate(rows) if r["source_split"] == "test"])
+        if set(groups[trainval]) & set(groups[test]):
+            raise ValueError("Official partitions overlap patients; audit or exclude training views first")
+    elif declared == {""}:
+        trainval, test = next(GroupShuffleSplit(n_splits=1, test_size=.2,
+                                               random_state=seed).split(indices, groups=groups))
+    else:
+        raise ValueError("source_split must be train/test for all rows, or blank for all rows")
     train_sub, val_sub = next(GroupShuffleSplit(n_splits=1, test_size=.25,
                                                random_state=seed).split(trainval, groups=groups[trainval]))
     parts = dict(train=trainval[train_sub], validation=trainval[val_sub], test=test)
@@ -62,6 +71,8 @@ def patient_split(rows, seed=42):
 def prepare_image(source, blur=0., noise=0., seed=42):
     with Image.open(source) as original:
         image = ImageOps.exif_transpose(original)
+        if image.mode in ("P", "RGBA", "LA", "CMYK"):
+            image = image.convert("RGB")
         # Normalize grayscale intensities before converting, preserving 16-bit exports.
         pixels = np.asarray(image, dtype=np.float32)
         if pixels.ndim == 3:

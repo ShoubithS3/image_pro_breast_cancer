@@ -1,0 +1,12 @@
+services:
+  mammo-lens:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/app/data:ro
+      - ./artifacts:/app/artifacts
+      - ./state:/app/state
+    environment:
+      MAMMO_ENABLE_TRAINING: "0"
+    restart: unless-stopped
