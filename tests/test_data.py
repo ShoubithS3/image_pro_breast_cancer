@@ -30,7 +30,7 @@ def test_cbis_uid_mapping_aggregation_and_official_patient_exclusion(cohort,tmp_
     # Same full image with another malignant lesion: aggregate, never duplicate rows.
     write_csv(root/'csv/calc_case_description_train_set.csv',fields,[dict(train[0],pathology='MALIGNANT')])
     write_csv(root/'csv/calc_case_description_test_set.csv',fields,[])
-    out=tmp_path/'manifest.csv'
+    out=tmp_path/'cbis-manifest.csv'
     report=build_cbis_manifest(root,out)
     assert report['excluded_train_views_for_test_patients']==12
     rows=load_manifest(out);parts=patient_split(rows)

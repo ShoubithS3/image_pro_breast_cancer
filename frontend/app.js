@@ -52,7 +52,7 @@ function showPrediction(result){
   if(p.patch_masking.length){
     const title=textNode('p','Patch-masking response / replace one region with image-median intensity','small');panel.append(title);
     p.patch_masking.forEach((row,i)=>panel.append(textNode('div',`P${i+1} → score ${displayNumber(row.score)} / Δ ${row.delta>=0?'+':''}${displayNumber(row.delta)}`,'small')));
-    panel.append(textNode('p','This measures a model perturbation, not causal explanation or lesion significance.','small'));
+    panel.append(textNode('p','Patch selection is recomputed after masking. This measures the full pipeline response, not causal explanation or lesion significance.','small'));
   }
 }
 function drawApiImage(canvas,url){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>{canvas.getContext('2d').drawImage(img,0,0,256,256);resolve();};img.onerror=reject;img.src=url;});}

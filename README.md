@@ -1,61 +1,153 @@
 # MAMMO-LENS
 
-**Density-aware evaluation, patch evidence, and reliability experiments for mammogram classification.**
+**An interactive mammography research workbench: global/local evidence, density assessment, and reliability under image degradation.**
 
-Image Processing and Analysis (CAI3400), Presidency University, Bengaluru. This repository starts with a runnable **handcrafted baseline**. The proposed deep model is future work; no real-data training results or novelty claims are supplied.
+Built for Image Processing and Analysis (CAI3400), Presidency University, Bengaluru. Full source includes a web frontend, FastAPI backend, CBIS-DDSM adapter, handcrafted baselines, a PyTorch global/patch model, training jobs, calibration, evaluation, and tests.
 
-## Research question
+> This is a research project, not a clinical tool. CBIS-DDSM supports retrospective abnormality classification; it does **not** establish future short-term cancer risk. No real-data performance is claimed until dataset preparation and training have completed.
 
-Do local image features improve benign/malignant classification over global features, and how do breast density and image degradation affect performance and selective prediction?
+## Start the full application
 
-The assigned topic is “Breast Cancer Risk Prediction from Mammograms,” including density assessment and patch-based deep features. CBIS-DDSM supports retrospective abnormality classification; future short-term cancer risk requires longitudinal outcomes and a defined prediction horizon. Discuss that scope distinction with the coordinator. Density subgroup evaluation is not automated density assessment. A deep patch encoder and density assessment remain required extensions if the assigned scope is retained.
-
-## Run
-
-Python 3.11+; the tested cloud runtime uses Python 3.12. From this checkout:
+Use Python 3.12 and [uv](https://docs.astral.sh/uv/). From the repository root:
 
 ```bash
-UV_CACHE_DIR=/workspace/.uv-cache uv venv /workspace/mammo-lens-venv
-UV_CACHE_DIR=/workspace/.uv-cache uv pip sync --python /workspace/mammo-lens-venv/bin/python requirements.lock
-source /workspace/mammo-lens-venv/bin/activate
-python -m pytest -q
-streamlit run app.py --server.address 0.0.0.0 --server.port 8501 --server.headless true
+uv sync --locked --all-extras --python 3.12
+uv run --all-extras python -m uvicorn mammo_lens.api:app --host 127.0.0.1 --port 8000
 ```
 
-No API key is needed. The viewer can normalize images and display patches without a model; predictions appear only when a locally trained artifact exists. Never load untrusted joblib/pickle artifacts.
+Open the server's root page in your local browser. The server serves both the frontend and API; no Node build is needed. Interactive API documentation is at `/docs`. For remote deployment, use an authenticated HTTPS reverse proxy and set appropriate upload/concurrency limits; operator training is disabled by default.
 
-A self-contained browser sample is available at [demo/index.html](demo/index.html). Download and open it directly to explore the workflow without installing Python. It demonstrates browser image processing only; it does not perform trained inference.
+For this cloud instance, the prepared virtual environment is `/workspace/mammo-lens-venv`; invoke its Python directly or use `UV_PROJECT_ENVIRONMENT=/workspace/mammo-lens-venv uv run --all-extras ...`. Set `UV_CACHE_DIR=/workspace/.uv-cache` when the home cache directory is read-only.
 
-## Dataset preparation
+### Frontend workflow
 
-Obtain CBIS-DDSM from the assignment's Kaggle dataset (`awsaf49/cbis-ddsm-breast-cancer-image-dataset`), respecting its usage conditions. Keep downloaded data under ignored `data/`. No dataset is bundled or downloaded automatically.
+1. Explore the procedural phantom, or upload a de-identified PNG/JPEG. The phantom is texture only and never receives a disease score.
+2. Inspect four texture-selected patches and controlled blur/noise changes in the browser.
+3. Select a completed model, then click **Run server analysis**. The API normalizes the original upload consistently with training and returns model scores, score changes, optional density probabilities, and patch-masking responses. No model means image processing only.
+4. Review held-out results in the experiment ledger, inspect coverage/error curves and patient confidence intervals, or export your observation report.
+5. Use the authenticated operator console to audit the dataset and launch/monitor training jobs, or train from the CLI.
 
-Prepare a CSV with the following schema; paths resolve relative to the CSV:
+Uploads are not retained after the request. The multipart parser may use temporary files for larger uploads; request files are closed after reading. API analysis additionally supports TIFF exports. Scores and images are returned to the requesting browser; no external prediction service is used. The UI clearly labels unvalidated confidence flags and synthetic experiments.
 
-```csv
-patient_id,image_path,label,density
-P_00001,images/example.png,0,2
-P_00002,images/another.png,1,3
-```
+A separate [standalone sample](demo/index.html) opens without Python. The earlier Streamlit viewer is retained in `app.py` as an optional exploratory interface; the FastAPI frontend is the primary application.
 
-`0` = benign, `1` = malignant. Optional density: categories 1–4; blank means unknown. Verify actual source metadata and label semantics before mapping. Preserve original patient IDs across all lesions, sides, and views. Use full mammogram exports consistently; mixing lesion crops and full images can confound the study. Map CBIS-DDSM metadata explicitly, including the treatment of `BENIGN_WITHOUT_CALLBACK`, and document exclusions. Do not map labels using filenames. DICOM needs a separately validated export step with polarity/orientation checks; this baseline accepts PNG/JPEG/TIFF, not DICOM.
+## Get and prepare CBIS-DDSM
 
-The loader rejects duplicate image bytes and missing files. This does not detect recompressed duplicates; manually audit source patient identifiers and export provenance too. Train-only augmentation must be added after splitting, never as new patients.
-
-## Train and compare
+Assignment dataset: [awsaf49/cbis-ddsm-breast-cancer-image-dataset](https://www.kaggle.com/datasets/awsaf49/cbis-ddsm-breast-cancer-image-dataset). Respect its source usage terms. Download needs `www.kaggle.com` and the redirect host `storage.googleapis.com`; the public download does not normally require an API key. Keep at least 15 GiB free. The archive is approximately 5.3 GB compressed.
 
 ```bash
-python -m mammo_lens.cli data/manifest.csv --mode global --output artifacts/global
-python -m mammo_lens.cli data/manifest.csv --mode patch --output artifacts/patch
-python -m mammo_lens.cli data/manifest.csv --mode combined --output artifacts/combined
+uv run python scripts/download_dataset.py --destination data/cbis-ddsm
+uv run python -m mammo_lens.data data/cbis-ddsm --output data/manifest.csv
 ```
 
-These commands use the same fixed patient-group split (approximately 60/20/20 by patient, seed 42). Each partition must contain both classes. At least ten patients are required; a scientifically useful cohort needs substantially more. Preserve the official held-out partition for the final study once its patient overlap has been audited; the current random grouped split is a development baseline, not official benchmark reproduction. Do not tune the seed to improve test performance.
+The downloader preserves TLS verification, bounds archive size, rejects unsafe extraction paths/symlinks, and lets ZIP extraction check CRC. Its SHA-256 receipt is a local provenance record, not a publisher-authenticated checksum. Existing destinations/archives are preserved rather than overwritten; interrupted `.part` files are not automatically resumed.
 
-Each run writes a local model, metrics, and split manifest. Outputs contain patient identifiers and local paths; keep them private. Existing output directories are never overwritten. Metrics include AUROC, sensitivity/specificity at 0.5, Brier score, density subgroup counts, confidence-based coverage/error curves, and blur/noise stress tests. Single-class subgroups have undefined AUROC; absent classes have undefined sensitivity/specificity. Small subgroups are exploratory.
+The adapter maps case-description DICOM series identifiers to full-image JPEGs via `dicom_info.csv`. It aggregates repeated lesion descriptions into one full-image label: any malignant lesion → 1; `BENIGN` and `BENIGN_WITHOUT_CALLBACK` → 0. It checks conflicting metadata and duplicate image bytes. Density 0 is treated as unknown; 1–4 are auxiliary targets, not clinical categories inferred from image texture.
 
-The baseline uses normalized 256×256 grayscale histograms, intensity statistics, and gradient features. Patch mode pools four high-texture 64×64 grid patches. These patches are not lesion detections or explanations of model causality. Noise/blur are controlled synthetic degradations at the resized resolution, not validated simulations of acquisition conditions. Scores and the demo's 0.70 confidence flag are uncalibrated research outputs.
+Original test images are held out. If a test patient also has training images, their **training views are excluded** and counted in the audit; they are never leaked into training or added to the official test set. Validation is a fixed patient-group split of the retained training patients. This protocol differs from studies that retain patient overlap; report the exact audit counts. Missing JPEGs are counted as exclusions. For official benchmark claims, require zero missing files and report all remaining exclusions.
 
-## Submission plan
+The adapter has fixture-based integration tests but still needs validation against the actual downloaded export. It refuses ambiguous UID mappings instead of guessing. DICOM decoding is outside this JPEG-export workflow; independently verify polarity/orientation if exporting DICOM yourself.
 
-See [the research plan](docs/research-plan.md) for review deliverables, the deep-model extension, evaluation safeguards, and the evidence still needed. Tests use synthetic images solely to verify software behavior; their scores must never enter the results section.
+### Bring your own manifest
+
+CSV fields: `patient_id,image_path,label,density,source_split`. Paths resolve relative to the CSV; density may be blank. Labels: benign=0, malignant=1. `source_split` must be `train`/`test` for every row, or blank for every row. Without official partitions, the development split is approximately 60/20/20 by patient. Each partition must contain both classes; at least ten patients are required, although useful research needs many more.
+
+Keep all views, sides, and lesions belonging to one patient under the same ID. Duplicate hashes catch exact copies, not recompressed duplicates. Audit export provenance, target definitions, image types, and source identifiers before training. Never mix lesion crops with full mammograms without a declared experiment.
+
+## Train the baselines
+
+```bash
+uv run python -m mammo_lens.cli data/manifest.csv --mode global --output artifacts/global
+uv run python -m mammo_lens.cli data/manifest.csv --mode patch --output artifacts/patch
+uv run python -m mammo_lens.cli data/manifest.csv --mode combined --output artifacts/combined
+```
+
+These use intensity histograms, statistics, and gradients with standardized logistic regression. Patch mode pools four texture-rich 64×64 grid patches. Selection is heuristic, not lesion localization. Every run fits a temperature on validation scores only, then evaluates the held-out partition. New output directories are required to preserve prior runs.
+
+## Train the deep model
+
+```bash
+uv run --all-extras python -m mammo_lens.deep data/manifest.csv \
+  --output artifacts/deep-combined --mode combined --epochs 10 --batch-size 8
+
+# Density-conditioned fusion ablation; needs training density labels:
+uv run --all-extras python -m mammo_lens.deep data/manifest.csv \
+  --output artifacts/deep-density --mode combined --density-aware --epochs 10
+```
+
+Architecture: an ImageNet-initialized shared ResNet18 encodes a normalized global image and four selected patches. Gated attention pools local vectors; the classifier uses global, patch-only, or combined features. A supervised four-class density head is trained where density labels exist. Optional fusion uses **predicted** density probabilities, never held-out ground-truth density at inference. Compare density conditioning on/off as an ablation.
+
+Pretrained weights are cached under ignored `state/torch/` by default (`TORCH_HOME` overrides this), preserving checksum verification.
+
+The encoder, including its BatchNorm statistics, is frozen by default for modest CPU compute. `--fine-tune` trains it with a lower learning rate; `--device cuda` requires a separately installed compatible GPU build of PyTorch. The locked environment uses CPU wheels. `--no-pretrained` disables ImageNet initialization; appropriate for software smoke tests, not an equivalent research baseline.
+
+Validation log loss selects the checkpoint; validation scores fit scalar temperature calibration. The test set is not used for selection or calibration. Outputs include safe-loadable tensor weights, model configuration, epoch history, image hashes, patient split assignments, held-out metrics, paired blur/noise tests, and density summaries. Whole images are reduced to 256² before 224² global / 128² patch encoding: this is a resource-conscious starting point that can discard small calcifications. Measure higher-resolution alternatives before claiming clinical relevance.
+
+The architecture composes established techniques; originality must come from a literature-supported research gap and measured experiments, not a renamed network.
+
+## Metrics and evidence
+
+- Image-level AUROC, sensitivity/specificity at threshold 0.5, Brier score, and coverage versus error.
+- Patient-level exploratory endpoint: maximum image score, with a positive label if any included image is malignant.
+- Image-level 95% intervals from **200 patient-cluster bootstrap resamples**; valid resample counts are included. Small studies need careful interpretation and potentially more resamples.
+- Density subgroup counts/metrics and deep density-head accuracy when labels exist.
+- Blur/noise at the working resolution, paired with clean test images. These are controlled perturbations, not validated acquisition simulations.
+- API patch masking: replace a selected region with median image intensity and measure the score delta. Patch selection is recomputed after masking; this measures the full pipeline response, not isolated fixed-patch importance. Attention/masking is not causal or clinical explanation.
+
+The frontend's low-confidence flag uses 0.70, an explicitly unvalidated exploratory threshold. Temperature fitting is implemented; it does not guarantee calibration on a shifted population. Single-class subgroups have undefined AUROC, and absent classes yield undefined sensitivity/specificity.
+
+## Operator training console
+
+CLI training needs no token. Web training requires explicit opt-in:
+
+```bash
+export MAMMO_ENABLE_TRAINING=1
+# Generate a token locally without printing or committing it:
+export MAMMO_ADMIN_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+uv run --all-extras python -m uvicorn mammo_lens.api:app --host 127.0.0.1 --port 8000
+```
+
+Use the securely obtained token in the console; never put it in Git or share it in chat. The browser holds it in memory only. Do not enable operator mode on an unauthenticated public deployment. One server worker supervises one training subprocess at a time. Jobs persist under ignored `state/`; logs are operator-only. Interrupted records are marked after restart; do not restart the server while a training run is active. Dataset/artifact paths are operator-configured, never accepted from browser requests.
+
+Optional environment variables are documented in `.env.example`. They are read from the process environment; `.env` is not automatically loaded. Artifacts are trusted local outputs; uploading models or arbitrary pickle files is not supported.
+
+## Verify the entire pipeline
+
+```bash
+uv run --all-extras python -m pytest -q
+node --check frontend/app.js
+# Optional, with Chromium installed and the API running:
+uv run python scripts/browser_smoke.py
+uv run python scripts/smoke_train.py
+uv run --all-extras python scripts/smoke_train.py --deep \
+  --root data/synthetic-deep --output artifacts/synthetic-deep
+```
+
+Smoke commands generate random textures with arbitrary labels. They validate software plumbing only, are marked `synthetic-smoke`, and are blocked from disease scoring by the model registry. Their metrics must never be used as mammogram results. Real trained artifacts are intentionally not committed.
+
+CI runs the Python suite and JavaScript syntax check on pushes and pull requests. Docker files are supplied as a deployment option:
+
+```bash
+docker compose up --build
+```
+
+The container serves the app on port 8000, runs as a non-root user, and defaults to training off. Docker Compose configuration validates, but the cloud Docker build could not resolve the package host / egress proxy from its build container. The container image remains unverified; Python/API execution is the tested primary workflow here. See [validation record](docs/validation.md).
+
+## Project layout
+
+```text
+frontend/                  Responsive same-origin research UI
+mammo_lens/api.py          FastAPI uploads, analysis, experiments, operator jobs
+mammo_lens/deep.py         ResNet18, gated attention, density head, training CLI
+mammo_lens/cli.py          Handcrafted baseline training CLI
+mammo_lens/data.py         CBIS-DDSM adapter and audit
+mammo_lens/evaluation.py   Calibration, patient evaluation, clustered intervals
+mammo_lens/inference.py    Completed-model registry and shared inference
+mammo_lens/jobs.py         Persistent operator training supervisor
+scripts/                   Dataset download and synthetic smoke runners
+tests/                     Data, training, checkpoint, API and interaction checks
+docs/                      Research plan, literature starting points, report guide
+demo/                      Self-contained concept website
+```
+
+See [research plan](docs/research-plan.md), [literature notes](docs/literature.md), and [report guide](docs/report-guide.md). Keep data, patient identifiers, model binaries, local secrets, and generated results out of Git. Final deliverables must include measured real-data results and model availability through an appropriate, permitted artifact channel.

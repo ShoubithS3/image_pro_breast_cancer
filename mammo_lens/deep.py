@@ -6,6 +6,7 @@ claim of architectural novelty. All model selection/calibration uses validation 
 import argparse
 from copy import deepcopy
 import json
+import os
 import random
 from pathlib import Path
 
@@ -135,6 +136,8 @@ def train(manifest, output, mode='combined', epochs=10, batch_size=8, seed=42,
           pretrained=True, fine_tune=False, density_aware=False, device='auto', provenance='real'):
     if epochs<1 or batch_size<1:
         raise ValueError('Epochs and batch size must be positive')
+    os.environ.setdefault("TORCH_HOME", str(Path(os.environ.get("MAMMO_STATE", "state"))/"torch"))
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     random.seed(seed);np.random.seed(seed);torch.manual_seed(seed)
     torch.set_num_threads(2)
     torch.use_deterministic_algorithms(True)

@@ -137,8 +137,8 @@ def create_app(artifact_root=None, state_root=None, manifest=None):
         return dict(reference_image=encode_image(clean),processed_image=encode_image(pixels,boxes),patches=patch_info,
                     measurements=dict(mean_absolute_pixel_change=float(np.abs(pixels-clean).mean()),intensity_std=float(pixels.std())),
                     preprocessing='percentile_1_99.5_gray_256',transformations=dict(blur_radius=blur,noise_std=noise,noise_seed=42),
-                    prediction=prediction,clinical_validation=False,
-                    limitations=['Texture patches are not lesion detections.','Masking measures a perturbation response, not causal or clinical evidence.',
+                    prediction=prediction,trained_inference_performed=prediction is not None,clinical_validation=False,
+                    limitations=['Texture patches are not lesion detections.','Masking recomputes patch selection and measures a full-pipeline perturbation, not causal or clinical evidence.',
                                  'Scores are experimental; not future risk or validated clinical probabilities.'])
 
     @app.post('/api/analyze')

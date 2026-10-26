@@ -38,6 +38,8 @@ Abstract and problem; literature review; dataset and ethics/usage; preprocessing
 
 ## Current implementation status
 
-Implemented: handcrafted feature modes, patient-group splitting, duplicate-content check, logistic regression, held-out metrics, density subgroup summaries, coverage/error curves, synthetic blur/noise evaluation, and an image viewer with optional local model scoring.
+Implemented: full FastAPI/frontend application, authenticated training jobs, UID-based CBIS-DDSM JPEG adapter, handcrafted feature modes, global/patch ResNet18 with gated attention, supervised density head and optional predicted-density fusion, patient-safe official/test or development splitting, duplicate-content checks, validation-only checkpoint selection and temperature fitting, patient-cluster bootstrap intervals, patient aggregation, density subgroup metrics, synthetic blur/noise evaluation, and patch-masking response analysis.
 
-Not yet implemented or validated: CBIS-DDSM metadata adapter, real-data training, deep encoders, density assessment, official partition reproduction, calibration fitting, patient bootstrap intervals, multi-view fusion, longitudinal risk prediction, literature synthesis, and trained clinical performance. The viewer must never substitute illustrative numbers for these missing results.
+The standalone website and Streamlit viewer remain available as secondary interfaces. CI and Docker deployment definitions are included.
+
+Still outstanding: real dataset download/access, adapter validation on the downloaded export, real-data training and measured results, higher-resolution experiments, recent-paper/full-text literature review, final report/presentations, external validation, and clinical validation. Longitudinal risk prediction cannot be completed with these pathology labels alone. Viewers and synthetic tests must never substitute illustrative numbers for missing results.
