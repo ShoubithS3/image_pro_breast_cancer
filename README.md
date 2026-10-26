@@ -6,6 +6,10 @@ Built for Image Processing and Analysis (CAI3400), Presidency University, Bengal
 
 > This is a research project, not a clinical tool. CBIS-DDSM supports retrospective abnormality classification; it does **not** establish future short-term cancer risk. No real-data performance is claimed until dataset preparation and training have completed.
 
+## Move to your local desktop
+
+See [LOCAL-PC.md](LOCAL-PC.md). Clone this repository on your PC, then run `python run_local.py` (Windows: `py -3 run_local.py`; macOS/Linux: `python3 run_local.py`). The launcher prepares a local environment and opens the app in your browser. Continue development through a Codex session attached to that local folder.
+
 ## Start the full application
 
 Use Python 3.12 and [uv](https://docs.astral.sh/uv/). From the repository root:

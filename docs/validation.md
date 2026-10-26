@@ -22,3 +22,7 @@
 ## Remaining work for the submission
 
 Enable dataset download, validate the actual export and exclusions, run the predefined baselines and deep-model ablations, inspect failures, complete literature reading, and write the report/presentations using measured results. The software stack is implemented; those research deliverables cannot be replaced by smoke tests or a polished interface.
+
+## Local-PC handoff launcher
+
+`run_local.py --setup-only --test` created a fresh checkout-local `.venv` and passed all 15 tests on Linux. The launcher started the primary application on a separate test port; root and API health returned HTTP 200. Windows CMD and macOS execution remain untested until run on those systems.

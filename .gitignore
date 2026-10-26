@@ -12,3 +12,6 @@ state/
 !.env.example
 *.pt
 *.joblib
+
+.bootstrap/
+.local-cache/
