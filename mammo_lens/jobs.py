@@ -15,7 +15,7 @@ def now(): return datetime.now(timezone.utc).isoformat()
 class JobManager:
     def __init__(self, state_root, artifact_root, manifest):
         self.root=Path(state_root);self.artifacts=Path(artifact_root);self.manifest=Path(manifest)
-        self.lock=threading.Lock();self.process=None;self.thread=None;self.closing=threading.Event()
+        self.lock=threading.RLock();self.process=None;self.thread=None;self.closing=threading.Event()
         self.root.mkdir(parents=True,exist_ok=True)
         for file in self.root.glob('*.json'):
             try:
@@ -26,20 +26,24 @@ class JobManager:
             except (OSError,ValueError,KeyError): pass
 
     def _save(self,record):
-        path=self.root/(record['id']+'.json');temp=path.with_suffix('.tmp')
-        temp.write_text(json.dumps(record,indent=2)+'\n');temp.replace(path)
+        with self.lock:
+            path=self.root/(record['id']+'.json');temp=path.with_suffix('.tmp')
+            temp.write_text(json.dumps(record,indent=2)+'\n');temp.replace(path)
 
     def list(self):
-        return sorted([json.loads(p.read_text()) for p in self.root.glob('*.json')],key=lambda r:r['created_at'],reverse=True)
+        with self.lock:
+            records=[json.loads(p.read_text()) for p in self.root.glob('*.json')]
+        return sorted(records,key=lambda r:r['created_at'],reverse=True)
 
     def get(self,job_id):
         if not job_id.startswith('run-') or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789-' for c in job_id):
             raise FileNotFoundError('Job not found')
-        path=self.root/(job_id+'.json')
-        if not path.is_file(): raise FileNotFoundError('Job not found')
-        record=json.loads(path.read_text())
-        log=self.root/(job_id+'.log')
-        record['log_tail']=log.read_text(errors='replace')[-12000:] if log.exists() else ''
+        with self.lock:
+            path=self.root/(job_id+'.json')
+            if not path.is_file(): raise FileNotFoundError('Job not found')
+            record=json.loads(path.read_text())
+            log=self.root/(job_id+'.log')
+            record['log_tail']=log.read_text(errors='replace')[-12000:] if log.exists() else ''
         return record
 
     def start(self,request):

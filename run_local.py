@@ -46,6 +46,30 @@ def uv_command(env):
     return [str(python), '-m', 'uv']
 
 
+def sync_environment(uv, env):
+    """Create the locked environment, recovering from broken Windows uv aliases."""
+    command = uv + ['sync', '--locked', '--all-extras', '--python', '3.12']
+    try:
+        subprocess.run(command, cwd=ROOT, env=env, check=True)
+        return
+    except subprocess.CalledProcessError:
+        if os.name != 'nt':
+            raise
+
+    # Some Windows configurations cannot create uv's version alias even though
+    # the managed interpreter downloaded successfully. Retry with the concrete
+    # interpreter rather than making users repair a global symlink manually.
+    result = subprocess.run(uv + ['python', 'dir'], cwd=ROOT, env=env,
+                            check=True, capture_output=True, text=True)
+    managed = Path(result.stdout.strip())
+    candidates = sorted(managed.glob('cpython-3.12.*-windows-*/python.exe'), reverse=True)
+    if not candidates:
+        raise RuntimeError('uv downloaded Python 3.12 but no usable interpreter was found')
+    print(f'Retrying with managed Python at {candidates[0]}…', flush=True)
+    subprocess.run(uv + ['sync', '--locked', '--all-extras', '--python', str(candidates[0])],
+                   cwd=ROOT, env=env, check=True)
+
+
 def open_when_ready(process, port, stopped):
     address = f'http://127.0.0.1:{port}'
     for _ in range(150):
@@ -76,8 +100,7 @@ def main():
     env = environment()
     uv = uv_command(env)
     print('Preparing the locked Python 3.12 environment on this PC…', flush=True)
-    subprocess.run(uv + ['sync', '--locked', '--all-extras', '--python', '3.12'],
-                   cwd=ROOT, env=env, check=True)
+    sync_environment(uv, env)
     python = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
     if args.test:
         subprocess.run([str(python), '-m', 'pytest', '-q'], cwd=ROOT, env=env, check=True)
