@@ -1,0 +1,54 @@
+{
+  "source_commit": "345a6be",
+  "audit": {
+    "source": "awsaf49/cbis-ddsm-breast-cancer-image-dataset",
+    "label_rule": "full image is malignant if any described lesion is malignant",
+    "benign_rule": "BENIGN and BENIGN_WITHOUT_CALLBACK map to 0",
+    "skipped_missing_files": 0,
+    "excluded_train_views_for_test_patients": 64,
+    "duplicate_content_groups": 42,
+    "excluded_duplicate_images": 84,
+    "image_count": 2955,
+    "patient_count": 1554,
+    "split_images": {
+      "train": 1740,
+      "validation": 578,
+      "test": 637
+    }
+  },
+  "baseline_results": [
+    [
+      "Feature mode",
+      "AUROC",
+      "95% cluster CI",
+      "Brier",
+      "Sensitivity",
+      "Specificity"
+    ],
+    [
+      "global",
+      "0.6249",
+      "0.5749 to 0.6785",
+      "0.2359",
+      "0.4457",
+      "0.7282"
+    ],
+    [
+      "patch",
+      "0.5907",
+      "0.5387 to 0.6408",
+      "0.2385",
+      "0.4225",
+      "0.7045"
+    ],
+    [
+      "combined",
+      "0.6198",
+      "0.5777 to 0.6657",
+      "0.2379",
+      "0.4651",
+      "0.7018"
+    ]
+  ],
+  "deep_status": "No completed real checkpoint or metrics"
+}
